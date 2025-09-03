@@ -40,7 +40,8 @@ RecordingTransport::~RecordingTransport() {
 //流量的录制在read/write函数
 uint32_t RecordingTransport::read(uint8_t* buf, uint32_t len) {
   if (is_playback_ && playback_stream_.is_open()) {
-    std::lock_guard<std::mutex> lock(playback_mutex_);
+//TODO 这里的递归会产生死锁问题
+   // std::lock_guard<std::mutex> lock(playback_mutex_);
     
     // 检查是否还有数据可读
     if (playback_stream_.eof()) {
@@ -60,6 +61,7 @@ uint32_t RecordingTransport::read(uint8_t* buf, uint32_t len) {
     // 只处理读取方向的数据包
     if (header.direction != 'R') {
       // 跳过非读取数据包
+      std::cout << "DEBUG skip not 'R' marked data. direction=" << header.direction << "||len=" << len << std::endl;
       playback_stream_.seekg(header.length, std::ios::cur);
       return read(buf, len); // 递归调用读取下一个包
     }
@@ -70,6 +72,7 @@ uint32_t RecordingTransport::read(uint8_t* buf, uint32_t len) {
     }
     
     // 读取数据
+    std::cout << "read data from file. size=" << header.length << std::endl;
     playback_stream_.read(reinterpret_cast<char*>(buf), header.length);
     
     if (playback_stream_.gcount() != header.length) {
@@ -79,12 +82,14 @@ uint32_t RecordingTransport::read(uint8_t* buf, uint32_t len) {
     
     // 如果同时也在录制，记录这个读取操作
     if (record_reads_ && is_recording_) {
+      std::cout << "ERR: should not record in playback mode" << std::endl;
       recordData(buf, header.length, false);
     }
     
     return header.length;
   } else {
     // 正常模式 - 从实际传输层读取, 并且对数据进行记录
+    std::cout << "read data from network. size=" << len << std::endl;
     uint32_t bytes_read = transport_->read(buf, len);
     
     if (record_reads_ && is_recording_) {
@@ -96,6 +101,10 @@ uint32_t RecordingTransport::read(uint8_t* buf, uint32_t len) {
 }
 
 void RecordingTransport::write(const uint8_t* buf, uint32_t len) {
+  if (is_playback_) {
+    std::cout << "no need to write data to sever in replay mode. len=" << len << std::endl;
+    return;
+  }
   transport_->write(buf, len);
   
   if (record_writes_ && is_recording_) {
