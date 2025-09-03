@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <sstream>
 #include <mutex>
+#include <cstdio>
 
 using namespace apache::thrift::transport;
 
@@ -61,7 +62,7 @@ uint32_t RecordingTransport::read(uint8_t* buf, uint32_t len) {
     // 只处理读取方向的数据包
     if (header.direction != 'R') {
       // 跳过非读取数据包
-      std::cout << "DEBUG skip not 'R' marked data. direction=" << header.direction << "||len=" << len << std::endl;
+      printf("DEBUG[%s:%d] skip not 'R' marked data. direction=%c||len=%d\n", __FUNCTION__, __LINE__, header.direction, len);
       playback_stream_.seekg(header.length, std::ios::cur);
       return read(buf, len); // 递归调用读取下一个包
     }
@@ -72,7 +73,7 @@ uint32_t RecordingTransport::read(uint8_t* buf, uint32_t len) {
     }
     
     // 读取数据
-    std::cout << "read data from file. size=" << header.length << std::endl;
+    printf("DEBUG[%s:%d] read data from file. size=%d\n", __FUNCTION__, __LINE__, header.length);
     playback_stream_.read(reinterpret_cast<char*>(buf), header.length);
     
     if (playback_stream_.gcount() != header.length) {
@@ -82,14 +83,14 @@ uint32_t RecordingTransport::read(uint8_t* buf, uint32_t len) {
     
     // 如果同时也在录制，记录这个读取操作
     if (record_reads_ && is_recording_) {
-      std::cout << "ERR: should not record in playback mode" << std::endl;
+      printf("ERROR[%s:%d] should not record in replay mode\n", __FUNCTION__, __LINE__);
       recordData(buf, header.length, false);
     }
     
     return header.length;
   } else {
     // 正常模式 - 从实际传输层读取, 并且对数据进行记录
-    std::cout << "read data from network. size=" << len << std::endl;
+    printf("DEBUG[%s:%d] read data from network. size=%d\n", __FUNCTION__, __LINE__, len);
     uint32_t bytes_read = transport_->read(buf, len);
     
     if (record_reads_ && is_recording_) {
@@ -102,7 +103,7 @@ uint32_t RecordingTransport::read(uint8_t* buf, uint32_t len) {
 
 void RecordingTransport::write(const uint8_t* buf, uint32_t len) {
   if (is_playback_) {
-    std::cout << "no need to write data to sever in replay mode. len=" << len << std::endl;
+    printf("DEBUG[%s:%d] NOT write data to werver in replay mode. size=%d\n", __FUNCTION__, __LINE__, len);
     return;
   }
   transport_->write(buf, len);
@@ -146,7 +147,7 @@ void RecordingTransport::recordData(const uint8_t* buf, uint32_t len, bool is_wr
   record_stream_.write(reinterpret_cast<const char*>(&header), sizeof(header));
   record_stream_.write(reinterpret_cast<const char*>(buf), len);
   record_stream_.flush();
-  std::cout << "DEBUG: recording||direction=" << header.direction << "||ts=" << header.timestamp << "||len=" << header.length << "||data=XXX..." << std::endl;
+  printf("DEBUG[%s:%d] recording. || direction=%c||ts=%ld||len=%d||data=...\n", __FUNCTION__, __LINE__, header.direction, header.timestamp, len);
 }
 
 void RecordingTransport::startRecording() {

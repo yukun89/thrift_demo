@@ -113,7 +113,19 @@ void replay() {
 }
 
 int main() {
-    //record();
-    replay();
+    int number;
+    std::cout << "Enter an integer:0(End), 1(Record), 2(Replay)...";
+    std::cin >> number;
+    while(number > 0) {
+        if (number == 1) {
+    	    std::cout << "run record." << std::endl;
+            record();
+	}
+        if (number == 2) {
+    	    std::cout << "run replay and exit" << std::endl;
+    	    replay();
+	    break;
+	}
     return 0;
+    }
 }
